@@ -16,6 +16,10 @@ test-suite/tests/*.png
 
 node_modules
 
+## Nix
+result
+.direnv
+
 ## Rust
 debug
 target

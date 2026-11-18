@@ -1,5 +1,12 @@
-{ pkgs ? import <nixpkgs> {} }:
+# flake.nix passes in `conjure` from the conjure flake, which brings Savile Row, Minion and Chuffed with it,
+# and `rustToolchain`, the Rust toolchain rust-toolchain.toml pins.
+{ pkgs ? import <nixpkgs> {}, conjure, rustToolchain }:
 let
+
+    # The pinned toolchain, plus the standard library's source and rust-analyzer for editors.
+    devToolchain = rustToolchain.override (old: {
+        extensions = (old.extensions or []) ++ [ "rust-src" "rust-analyzer" ];
+    });
 
     clangMkShell = pkgs.mkShell.override { stdenv = pkgs.clangStdenv; };
 
@@ -23,65 +30,20 @@ let
     ];
 
     # rust-specific dependencies
-    RustDependencies = with pkgs; [
-        cargo
-        rustc
-        rustfmt
-        clippy
-        rust-analyzer
+    RustDependencies = [
+        devToolchain
+        pkgs.cargo-nextest
     ];
-
-    conjure = pkgs.stdenv.mkDerivation rec {
-        pname = "conjure";
-        version = "v2.6.1";
-        zipfile = "conjure-v2.6.1-linux-with-solvers.zip";
-
-        src = pkgs.fetchzip {
-            # NOTE: here, there is some scope for changes in future
-            # we can use the following line in order to always use the latest release
-            # url = "https://github.com/conjure-cp/conjure/releases/latest/conjure-nightly-linux-with-solvers.zip";
-            # However, this is not `nix-like' because the source is not immutable.
-
-            url = "https://github.com/conjure-cp/conjure/releases/download/" + version + "/" + zipfile;
-            # Replace with the hash `nix build` reports on first run.
-            sha256 = "sha256-+pc634fz3cqsFuXiUbtj/jrMPbGZMrye7pANNaw+ejE=";
-        };
-
-        nativeBuildInputs = [ pkgs.autoPatchelfHook ];
-        buildInputs = with pkgs; [
-            stdenv.cc.cc.lib
-            zlib
-            gmp
-            bzip2
-            numactl
-        ];
-
-        dontBuild = true;
-
-        installPhase = ''
-            runHook preInstall
-            mkdir -p $out
-            cp -r . $out/
-            runHook postInstall
-        '';
-
-        meta = with pkgs.lib; {
-            description = "Conjure: The Automated Constraint Modelling Tool (nightly build, with bundled solvers)";
-            homepage = "https://github.com/conjure-cp/conjure";
-            platforms = [ "x86_64-linux" ];
-        };
-    };
 in
 
 clangMkShell {
-    buildInputs = with pkgs; [
-    ] ++ MedievalDependencies ++ DevDependencies ++ RustDependencies;
+    buildInputs = [ conjure ] ++ MedievalDependencies ++ DevDependencies ++ RustDependencies;
 
     # Fixes rust-analyzer looking for standard library source code
-    RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
+    RUST_SRC_PATH = "${devToolchain}/lib/rustlib/src/rust/library";
     LIBCLANG_PATH="${pkgs.llvmPackages.libclang.lib}/lib";
 
     shellHook = ''
-      export PATH="${pkgs.clangStdenv.cc}/bin:${conjure}:$PATH";
+      export PATH="${pkgs.clangStdenv.cc}/bin:$PATH";
     '';
 }
